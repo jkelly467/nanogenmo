@@ -1,73 +1,38 @@
 var markov = require('markov')
 var fs = require('fs')
 var Twit = require('twit')
-var N = {}
+var rand = require('./lib/rand.js')
+var sources = require('./lib/sources.js')
+var util = require('util')
 
-var T = new Twit(require('./private/twitter.js')
+var T = new Twit(require('./private/twitter.js'))
 
-N.Sources = {
-  horror: [
-    'pg11074.txt',
-    'pg1188.txt',
-    'pg2147.txt',
-    'pg2148.txt',
-    'pg2149.txt',
-    'pg2150.txt',
-    'pg2151.txt',
-    'pg31469.txt',
-    'pg345.txt',
-    'pg375.txt',
-    'pg389.txt',
-    'pg42.txt',
-    'pg5200.txt',
-    'pg7849.txt'
-  ]
-}
-
-N.Rand = {
-	_s0: 0,
-	_s1: 0,
-	_s2: 0,
-	_c: 0,
-	_frac: 2.3283064365386963e-10, /* 2^-32 */
-  getUniform: function() {
-    var t = 2091639 * this._s0 + this._c * this._frac;
-    this._s0 = this._s1;
-    this._s1 = this._s2;
-    this._c = t | 0;
-    this._s2 = t - this._c;
-    return this._s2;
-  },
-  getRandom: function(end, start){
-    start = start || 0
-    return Math.floor(this.getUniform()*(end-start+1)+start)
-  },
-	setSeed: function(seed) {
-		seed = (seed < 1 ? 1/seed : seed);
-
-		this._seed = seed;
-		this._s0 = (seed >>> 0) * this._frac;
-
-		seed = (seed*69069 + 1) >>> 0;
-		this._s1 = seed * this._frac;
-
-		seed = (seed*69069 + 1) >>> 0;
-		this._s2 = seed * this._frac;
-
-		this._c = 1;
-		return this;
-	}
-}
-
-N.Rand.setSeed(Date.now())
-
+rand.setSeed(Date.now())
 
 var m = markov(1)
-var rand = N.Rand
+var wordCount = 0 
 
 var getSentenceEnd = function(){
   return ['.','!','?'][rand.getRandom(2,0)]
 }
+
+
+T.get('search/tweets', {q:'creepy OR scary OR horror OR evil', count:30}, function(err, reply){
+  if(err){
+    console.log(err)
+  }else{
+    var topicSentences = []
+    var txt
+    reply.statuses.forEach(function(item){
+      txt = item.text
+      if(!/@/.test(txt) && !/RT/.test(txt)){
+        topicSentences.push(txt.replace(/http.*$/,'')/*.replace(/#[Ss][Cc][Aa][Rr][Yy]/,"")*/)
+      }
+    })
+
+    generate(topicSentences)
+  }
+})
 
 function generateSentence(seed, parLength){
   if(!parLength) return ""
@@ -79,13 +44,17 @@ function generateSentence(seed, parLength){
   if(!/[\.!\?]$/.test(sentence)){
     sentence += getSentenceEnd()
   }
+  wordCount += sentence.split(' ').length
   sentence += "  "
   return sentence + generateSentence(sentence, parLength-1)
 }
 
-var s = fs.createReadStream(__dirname + "/source_material/horror/pg389.txt")
-var firstSentence = "They built the wall between Wisconsin and Minnesota to be unscalable and impenetrable.  "
-m.seed(s, function(){
-  var paragraph = firstSentence + generateSentence(firstSentence, rand.getRandom(14,2))
-  console.log(paragraph)
-})
+function generate(topicSentences){
+  var s = fs.createReadStream(__dirname + "/source_material/horror/pg389.txt")
+  m.seed(s, function(){
+    topicSentences.forEach(function(sentence){
+      var paragraph = "\t"+sentence + (/[\.!\?]\s*$/.test(sentence) ? "  " : ".  ")  + generateSentence(sentence, rand.getRandom(24,4))
+      console.log(paragraph + "\n")
+    })
+  })
+}
