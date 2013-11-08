@@ -11,50 +11,100 @@ rand.setSeed(Date.now())
 
 var m = markov(1)
 var wordCount = 0 
+var chapterCount = 1
 
 var getSentenceEnd = function(){
   return ['.','!','?'][rand.getRandom(2,0)]
 }
 
-
-T.get('search/tweets', {q:'creepy OR scary OR horror OR evil', count:30}, function(err, reply){
-  if(err){
-    console.log(err)
-  }else{
-    var topicSentences = []
-    var txt
-    reply.statuses.forEach(function(item){
-      txt = item.text
-      if(!/@/.test(txt) && !/RT/.test(txt)){
-        topicSentences.push(txt.replace(/http.*$/,'')/*.replace(/#[Ss][Cc][Aa][Rr][Yy]/,"")*/)
-      }
-    })
-
-    generate(topicSentences)
-  }
-})
-
 function generateSentence(seed, parLength){
+  //termination condition
   if(!parLength) return ""
+
+  //get a sentence of random length
   var sentence = m.respond(seed, rand.getRandom(35,8)).join(' ')
+
+  //capitalize the first letter if necessary
   if(/^[a-z]/.test(sentence)){
     sentence = sentence.charAt(0).toUpperCase() + sentence.slice(1)
   }
+  
+  //replace double spaces with single spaces
   sentence.replace("  ", " ")
+
+  //throw a random sentence ender in there if necessary
   if(!/[\.!\?]$/.test(sentence)){
     sentence += getSentenceEnd()
   }
+
+  //update word count
   wordCount += sentence.split(' ').length
   sentence += "  "
+  
+  //call this recursively
   return sentence + generateSentence(sentence, parLength-1)
 }
 
-function generate(topicSentences){
-  var s = fs.createReadStream(__dirname + "/source_material/horror/pg389.txt")
-  m.seed(s, function(){
-    topicSentences.forEach(function(sentence){
-      var paragraph = "\t"+sentence + (/[\.!\?]\s*$/.test(sentence) ? "  " : ".  ")  + generateSentence(sentence, rand.getRandom(24,4))
-      console.log(paragraph + "\n")
-    })
+function generate(topicInfo){
+  //chapter header
+  var paragraph = '#'+chapterCount+'. "'+topicInfo.tweet+'"\n\t~'+topicInfo.user+'\n\n'
+  //for each tweet in timeline
+  topicInfo.timeline.forEach(function(sentence){
+    //create a paragraph
+    paragraph += "\t"+sentence + (/[\.!\?]\s*$/.test(sentence) ? "  " : ".  ")  + generateSentence(sentence, rand.getRandom(24,4))+"\n\n"
+  })
+  //write paragraph out
+  console.log(paragraph)
+  chapterCount++
+}
+
+function getTimeline(topics){
+  T.get('statuses/user_timeline',
+        {
+          user_id: topics.id,
+          count: rand.getRandom(75,20),
+          trim_user: true,
+          exclude_replies: true,
+          include_rts: false
+        }, function(err, reply){
+          if(err) cb(err)
+          topics.timeline = reply.map(function(item){
+            return item.text
+          })
+          generate(topics)
+        }
+  )
+}
+
+function getChapterTweets(){
+  T.get('search/tweets', {q:'creepy OR scary OR horror OR evil', count:20}, function(err, reply){
+    if(err){
+      console.log(err)
+    }else{
+      var topicSentences = []
+      var txt
+      reply.statuses.forEach(function(item){
+        txt = item.text
+        if(!/@/.test(txt) && !/RT/.test(txt)){
+          topicSentences.push({
+            tweet: txt.replace(/http.*$/,''),
+            id: item.user.id,
+            user: item.user.screen_name
+          })
+        }
+      })
+
+      topicSentences.forEach(function(topic){
+        getTimeline(topic)
+      })
+
+      if(wordCount < 50000){
+        getChapterTweets()
+      }
+    }
   })
 }
+
+var s = fs.createReadStream(__dirname + "/source_material/horror/horror.txt")
+// var s = fs.createReadStream(__dirname + "/source_material/horror/pg375.txt")
+m.seed(s, getChapterTweets)
