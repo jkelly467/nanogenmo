@@ -47,14 +47,15 @@ function generateSentence(seed, parLength){
 
 function generate(topicInfo){
   //chapter header
-  var paragraph = '#'+chapterCount+'. "'+topicInfo.tweet+'"\n\t~'+topicInfo.user+'\n\n'
+  var paragraph = '#'+chapterCount+'. "'+topicInfo.tweet+'"\n    ~'+topicInfo.user+'\n\n'
   //for each tweet in timeline
   topicInfo.timeline.forEach(function(sentence){
     //create a paragraph
-    paragraph += "\t"+sentence + (/[\.!\?]\s*$/.test(sentence) ? "  " : ".  ")  + generateSentence(sentence, rand.getRandom(24,4))+"\n\n"
+    paragraph += "  " +sentence + (/[\.!\?]\s*$/.test(sentence) ? "  " : ".  ")  + generateSentence(sentence, rand.getRandom(24,4))+"\n\n"
   })
   //write paragraph out
   console.log(paragraph)
+  if(wordCount > 50000) process.exit(0)
   chapterCount++
 }
 
